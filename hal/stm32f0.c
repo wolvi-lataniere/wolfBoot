@@ -59,7 +59,7 @@ this file shall include only validated values
 #define FLASH_CR_PER                (1 << 1)
 
 #define FLASH_MEM_OFFSET            (0x08000000)
-#define FLASH_MEM_END               (0x08010000)
+#define FLASH_MEM_END               (0x08040000)
 #define FLASH_PAGE_SIZE             (0x800)
 
 #define FLASH_KEY1                  (0x45670123)
@@ -98,62 +98,65 @@ static RAMFUNCTION void flash_wait_complete(void)
 static void RAMFUNCTION clear_errors(void)
 {
     /// clear PGERR and WRRTERR
-    FLASH_SR |= FLASH_SR_PGERR | FLASH_SR_WRPRTERR;
+    FLASH_SR |= FLASH_SR_PGERR | FLASH_SR_WRPRTERR | FLASH_SR_EOP;
 }
 
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    /*
-     This function provides an implementation of the flash write function, using the target's IAP interface. address is the offset from the beginning of the flash area, data is the payload to be stored in the flash using the IAP interface, and len is the size of the payload. hal_flash_write should return 0 upon success, or a negative value in case of failure.
-     */
   int i=0;
-  uint16_t *src = (uint16_t*)data;
-  uint16_t *dst = (uint16_t*)address;
+  uint16_t *src, *dst;
 
-  flash_wait_complete();
   clear_errors();
+
+
+  /* Set programming mode */
+  FLASH_CR |= FLASH_CR_PG;
 
   while(i<len)
     {
-      if((len-i) < 2)
+      clear_errors();
+      if(((len-i) < 2) ||
+         (((((uint32_t)data)+i)&0x01)!=0) ||
+         (((address+i)&0x01)!= 0))
         {
-          /* Set programming mode */
-          FLASH_CR |= FLASH_CR_PG;
           uint16_t buffer;
-          if ((((uint32_t)dst) & 1) == 0)
-          {
-            buffer = (*dst) & 0xFF00;
-            buffer |= *((uint8_t*)src);
-          }
+          uint8_t* bufBytes = (uint8_t*)&buffer;
+          int offset = (address+i)&0x00000001;
+          dst = (uint16_t*)(address & 0xfffffffe);
+
+          // STM32F0 & F1 are not able to write over non-erased block, except writting a 16bits 0
+          // Thus, in case of write_success, we have to write 2 bytes to 0.
+          if ((buffer != 0xFFFF) &&
+              (data[i] == 0))
+            buffer = 0;
           else
-            {
-              dst = (uint16_t*)((uint32_t)dst & 0xFFFFFFFE);
-              buffer = (*dst) & 0x00FF;
-              buffer |= (*((uint8_t*)src))<<8;
-            }
-          *dst = buffer;
+            buffer = dst[i>>1];
+
+          bufBytes[offset] = data[i];
+          // Write the data
           flash_wait_complete();
-          /* unset programming mode */
-          FLASH_CR &= ~FLASH_CR_PG;
+          dst[i>>1] = buffer;
+          flash_wait_complete();
           i++;
         }
       else
         {
-          /* Set programming mode */
-          FLASH_CR |= FLASH_CR_PG;
-          *dst = *src;
-          flash_wait_complete();
-          /* /\* unset programming mode *\/ */
-          FLASH_CR &= ~FLASH_CR_PG;
+          src=(uint16_t*)(data);
+          dst=(uint16_t*)(address);
 
+          flash_wait_complete();
+          dst[i>>1] = src[i>>1];
+          flash_wait_complete();
+          
           i+=2;
-          src++;
-          dst++;
         }
     }
 
-  return ((FLASH_SR&FLASH_SR_PGERR)==0)?0:1;
+  /* unset programming mode */
+  FLASH_CR &= ~FLASH_CR_PG;
+
+  return 0;//((FLASH_SR&FLASH_SR_PGERR)==0)?0:1;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -161,10 +164,12 @@ void RAMFUNCTION hal_flash_unlock(void)
     /*
      If the IAP interface of the flash memory of the target requires it, this function is called before every write and erase operations to unlock write access to the flash. On some targets, this function may be empty.
      */
-    FLASH_KEYR = FLASH_KEY1;
-    DMB();
-    FLASH_KEYR = FLASH_KEY2;
-    DMB();
+  flash_wait_complete();
+  FLASH_KEYR = FLASH_KEY1;
+  DMB();
+  FLASH_KEYR = FLASH_KEY2;
+  DMB();
+  while ((FLASH_CR & FLASH_CR_LOCK) != 0);
 }
 
 
@@ -314,9 +319,9 @@ void hal_init(void)
     /*
     This function is called by the bootloader at the very beginning of the execution. Ideally, the implementation provided configures the clock settings for the target microcontroller, to ensure that it runs at at the required speed to shorten the time required for the cryptography primitives to verify the firmware images.
     */
-    FLASH_ACR |= 1;
-    DMB();
-    clock_pll_on(0);
+  FLASH_ACR = (FLASH_ACR & (~((1<<5) | (1<<4)))) | 1;
+  DMB();
+  clock_pll_on(0);
 }
 
 
