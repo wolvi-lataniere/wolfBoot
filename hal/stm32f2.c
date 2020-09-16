@@ -44,8 +44,10 @@
 #define RCC_CFGR_SW_HSE             0x1
 #define RCC_CFGR_SW_PLL             0x2
 
-
-#define RCC_PLLCFGR_PLLSRC          (1 << 22)
+// USE HSE
+//#define RCC_PLLCFGR_PLLSRC          (1 << 22)
+// USE HSI
+#define RCC_PLLCFGR_PLLSRC          (0 << 22)
 
 #define RCC_PRESCALER_DIV_NONE 0
 #define RCC_PRESCALER_DIV_2    8
