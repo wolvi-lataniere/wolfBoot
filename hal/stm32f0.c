@@ -127,11 +127,10 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
           // STM32F0 & F1 are not able to write over non-erased block, except writting a 16bits 0
           // Thus, in case of write_success, we have to write 2 bytes to 0.
+          buffer = dst[i>>1];
           if ((buffer != 0xFFFF) &&
               (data[i] == 0))
             buffer = 0;
-          else
-            buffer = dst[i>>1];
 
           bufBytes[offset] = data[i];
           // Write the data
