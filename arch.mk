@@ -1,5 +1,7 @@
 ## CPU Architecture selection via $ARCH
 
+UPDATE_OBJS:=./src/update_flash.o
+
 # check for FASTMATH or SP_MATH
 ifeq ($(SPMATH),1)
   MATH_OBJS:=./lib/wolfssl/wolfcrypt/src/sp_int.o
@@ -13,6 +15,8 @@ ARCH_FLASH_OFFSET=0x0
 # Default SPI driver name
 SPI_TARGET=$(TARGET)
 
+# Default UART driver name
+UART_TARGET=$(TARGET)
 
 ## Hash settings
 ifeq ($(HASH),SHA256)
@@ -29,6 +33,13 @@ endif
 WOLFCRYPT_OBJS+=./lib/wolfssl/wolfcrypt/src/sha256.o
 
 ## ARM
+ifeq ($(ARCH),AARCH64)
+  CROSS_COMPILE:=aarch64-none-elf-
+  CFLAGS+=-DARCH_AARCH64 -march=armv8-a
+  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+  CFLAGS+=-DNO_QNX
+endif
+
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE:=arm-none-eabi-
   CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork -DARCH_ARM
@@ -124,18 +135,8 @@ ifeq ($(TARGET),lpc)
   CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/drivers -I$(MCUXPRESSO_DRIVERS) -DCPU_$(MCUXPRESSO_CPU) -I$(MCUXPRESSO_CMSIS)/Include -DDEBUG_CONSOLE_ASSERT_DISABLE=1
   OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flashiap.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
   OBJS+=$(MCUXPRESSO_DRIVERS)/mcuxpresso/libpower_softabi.a $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o
+  OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
 endif
-
-
-CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
-
-## Toolchain setup
-CC=$(CROSS_COMPILE)gcc
-LD=$(CROSS_COMPILE)gcc
-AS=$(CROSS_COMPILE)gcc
-OBJCOPY:=$(CROSS_COMPILE)objcopy
-SIZE:=$(CROSS_COMPILE)size
-BOOT_IMG?=test-app/image.bin
 
 ifeq ($(TARGET),stm32f4)
   SPI_TARGET=stm32
@@ -152,4 +153,71 @@ ifeq ($(TARGET),stm32wb)
 		-Ihal \
 	    -DSTM32WB55xx
   endif
+endif
+
+ifeq ($(TARGET),psoc6)
+    CORTEX_M0=1
+    OBJS+= $(CYPRESS_PDL)/drivers/source/cy_flash.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_device.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
+					 $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
+					 $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
+
+    PSOC6_CRYPTO_OBJS=./lib/wolfssl/wolfcrypt/src/port/cypress/psoc6_crypto.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v1.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto_core_hw_v1.o \
+					 $(CYPRESS_PDL)/drivers/source/cy_crypto.o
+
+    CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/ \
+		-I$(CYPRESS_PDL)/devices/include \
+		-I$(CYPRESS_PDL)/cmsis/include \
+		-I$(CYPRESS_TARGET_LIB) \
+		-I$(CYPRESS_CORE_LIB)/include \
+		-I$(CYPRESS_PDL)/devices/include/ip \
+		-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
+		-DCY8C624ABZI_D44
+
+    ARCH_FLASH_OFFSET=0x10000000
+    ifneq ($(PSOC6_CRYPTO),0)
+        CFLAGS+=-DWOLFSSL_PSOC6_CRYPTO
+        OBJS+=$(PSOC6_CRYPTO_OBJS)
+    endif
+endif
+
+
+
+CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
+
+## Toolchain setup
+CC=$(CROSS_COMPILE)gcc
+LD=$(CROSS_COMPILE)gcc
+AS=$(CROSS_COMPILE)gcc
+OBJCOPY:=$(CROSS_COMPILE)objcopy
+SIZE:=$(CROSS_COMPILE)size
+BOOT_IMG?=test-app/image.bin
+
+
+
+## Update mechanism
+ifeq ($(ARCH),AARCH64)
+  CFLAGS+=-DMMU
+  UPDATE_OBJS:=src/update_ram.o
+endif
+ifeq ($(DUALBANK_SWAP),1)
+  UPDATE_OBJS:=src/update_flash_hwswap.o
 endif

@@ -48,6 +48,7 @@
 # automatically generated keys
 *.der
 *.pem
+*.sig
 
 # automatically generated source files
 src/ed25519_pub_key.c
@@ -56,14 +57,13 @@ src/rsa2048_pub_key.c
 src/rsa4096_pub_key.c
 
 # keygen binaries
-tools/ed25519/ed25519_sign
-tools/ed25519/ed25519_keygen
-tools/ecc256/ecc256_sign
-tools/ecc256/ecc256_keygen
+tools/keytools/sign
+tools/keytools/sign.exe
+tools/keytools/keygen
+tools/keytools/keygen.exe
 
 # Vim swap files
 .*.swp
-
 
 # tags etc.
 cscope.out
@@ -80,7 +80,16 @@ include/target.h
 # Test tools
 tools/test-expect-version/test-expect-version
 tools/test-update-server/server
+tools/uart-flash-server/ufserver
+tools/unit-tests/unit-parser
 config/*.ld
 
 # Generated confiuguration file
 .config
+.vs
+*.filters
+*.user
+
+# IAR files not under version control
+IDE/IAR/settings
+IDE/IAR/*.ewt

@@ -30,9 +30,18 @@
 #define SPI_DRV_H_INCLUDED
 
 #include <stdint.h>
+#include "image.h"
 
 #if defined(PLATFORM_stm32f4) || defined(PLATFORM_stm32f7) || defined(PLATFORM_stm32wb)
 #include "hal/spi/spi_drv_stm32.h"
+#endif
+
+#if defined(PLATFORM_zynq)
+#include "hal/spi/spi_drv_zynq.h"
+#endif
+
+#if defined(PLATFORM_nrf52)
+#include "hal/spi/spi_drv_nrf52.h"
 #endif
 
 void spi_init(int polarity, int phase);

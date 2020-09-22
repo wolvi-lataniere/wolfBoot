@@ -35,9 +35,6 @@ The bootloader consists of the following components:
    - The core bootloader
    - A small application library used by the application to interact with the bootloader [src/libwolfboot.c](src/libwolfboot.c)
 
-Only ARM Cortex-M boot mechanism is supported at this stage. Support for more architectures and
-microcontrollers will be added later. Relocating the interrupt vector can be disabled if needed.
-
 ## Integrating wolfBoot in an existing project
 
 ### Required steps
@@ -48,6 +45,7 @@ microcontrollers will be added later. Relocating the interrupt vector can be dis
    - Change the entry point of the firmware image to account for bootloader presence
    - Equip the application with the [wolfBoot library](docs/API.md) to interact with the bootloader
    - [Configure and compile](docs/compile.md) a bootable image with a single "make" command
+   - For help signing firmware see [wolfBoot Signing](docs/Signing.md)
 
 ### Examples provided
 
@@ -83,6 +81,11 @@ For detailed information about the configuration options for the target system, 
 
 For more detailed information about firmware update implementation, see [Firmware Update](docs/firmware_update.md)
 
+
+### Additional features
+   - [Remote external flash interface](docs/remote_flash.md)
+   - [External encrypted partitions](docs/encrypted_partitions.md)
+
 ## Troubleshooting
 
 1. Python errors when signing a key:
@@ -101,23 +104,19 @@ Traceback (most recent call last):
 AttributeError: 'EccPrivate' object has no attribute 'sign_raw'
 ```
 
-You need to install the latest wolfcrypt-pi here: https://github.com/wolfSSL/wolfcrypt-py
+You need to install the latest wolfcrypt-py here: https://github.com/wolfSSL/wolfcrypt-py
 
 Use `pip3 install wolfcrypt`.
-Make sure the wolfSSL library has been built with:
-```sh
 
-```
-
-To install based on a local wolfSSL installation use:
+Or to install based on a local wolfSSL installation use:
 
 ```sh
-cd youwolfssldir
-./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 CFLAGS="-DWOLFSSL_PUBLIC_MP"
+cd wolfssl
+./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 --enable-des3 CFLAGS="-DFP_MAX_BITS=8192 -DWOLFSSL_PUBLIC_MP"
 make
 sudo make install
 
-cd yourwolfcryptpydir
+cd wolfcrypt-py
 USE_LOCAL_WOLFSSL=/usr/local pip3 install .
 ```
 
@@ -167,3 +166,47 @@ USE_LOCAL_WOLFSSL=/usr/local pip3 install .
  * RSA 2048 bit digital signature verification
  * Hardware support
    * New HAL: STM32H7
+
+### V1.5 (2020-04-28)
+ * RSA 4096 bit digital signature verification
+ * SHA3
+ * Portable C key management tools
+ * Improved integration with Microsoft Windows
+   * Visual Studio solution for key management tools
+ * Support to compile with IAR
+   * Fixed incompatible code
+   * added IAR example project
+ * New architecture: ARMv8 (64-bit)
+   * ARM Cortex-A boot code compatible with TrustZone
+   * Linux staging and device tree support
+ * External flash abstraction
+   * remote update partition accessed via UART
+ * Hardware support
+   * New HAL: raspberry-pi
+   * New HAL: Xilinx Zynq+
+   * New HAL: NXP LPC54xx
+
+### V1.6 (2020-08-25)
+ * Support for encryption of external partitions
+ * Support for MPU on ARM Cortex-M platforms
+ * Support for using an RSA signature that includes ASN.1 encoded header
+ * Support for bootloader updates from external flash: SPI functions can run from RAM
+ * Added TPM RSA verify support
+ * Added option to use software SHA in combination with TPM
+ * Fix logic in emergency updates
+ * Fix loop logic in bootloader update
+ * Fix manifest header boundary checks (prevents parser overflows)
+ * Improve sanity checks for aligned fields in manifest header
+ * Add unit tests against manifest header parser
+ * Fix Ed25519 signing tool
+ * Fix RSA keygen tool
+ * wolfTPM integration: improvements and bugfixes
+ * Fix configuration and documentation for STM32WB
+ * Fix alignment of trailers in NVM_WRITEONCE mode
+ * Fix uint16_t index overflow on platforms with very small flash pages
+ * Fix for building C key tools on windows (Cygwin/MinGW/Visual Studio)
+ * Fix in LPC driver: correct page alignment in flash write
+ * Hardware support
+   * New HAL: Cypress psoc6
+   * Support for psoc6 Hardware crypto accelerator
+   * SPI driver: Nordic nRF52

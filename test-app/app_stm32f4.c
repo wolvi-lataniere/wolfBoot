@@ -78,6 +78,7 @@ static const char ACK='#';
 static uint8_t msg[MSGSIZE];
 
 
+
 void uart_write(const char c)
 {
     uint32_t reg;
@@ -219,6 +220,9 @@ void main(void) {
     version = wolfBoot_current_firmware_version();
     if ((version & 0x01) == 0)
         wolfBoot_success();
+#ifdef EXT_ENCRYPTED
+    wolfBoot_set_encrypt_key("0123456789abcdef0123456789abcdef", 32);
+#endif
     uart_write(START);
     for (i = 3; i >= 0; i--) {
         uart_write(v_array[i]);
@@ -290,47 +294,5 @@ void main(void) {
     while(1)
         ;
 }
-#endif /** PLATFROM_stm32f4 **/
+#endif /** PLATFORM_stm32f4 **/
 
-#ifdef PLATFORM_nrf52
-#define GPIO_BASE (0x50000000)
-#define GPIO_OUT        *((volatile uint32_t *)(GPIO_BASE + 0x504))
-#define GPIO_OUTSET     *((volatile uint32_t *)(GPIO_BASE + 0x508))
-#define GPIO_OUTCLR     *((volatile uint32_t *)(GPIO_BASE + 0x50C))
-#define GPIO_PIN_CNF     ((volatile uint32_t *)(GPIO_BASE + 0x700)) // Array
-
-static void gpiotoggle(uint32_t pin)
-{
-    uint32_t reg_val = GPIO_OUT;
-    GPIO_OUTCLR = reg_val & (1 << pin);
-    GPIO_OUTSET = (~reg_val) & (1 << pin);
-}
-
-void main(void)
-{
-    uint32_t pin = 19;
-    int i;
-    GPIO_PIN_CNF[pin] = 1; /* Output */
-    while(1) {
-        gpiotoggle(pin);
-        for (i = 0; i < 800000; i++)  // Wait a bit.
-              asm volatile ("nop");
-    }
-}
-
-#endif
-
-#ifdef PLATFORM_samr21
-void main(void) {
-    asm volatile ("cpsie i");
-    while(1)
-        WFI();
-}
-#endif
-
-#ifdef PLATFORM_hifive1
-void main(void) {
-    while(1)
-        ;
-}
-#endif

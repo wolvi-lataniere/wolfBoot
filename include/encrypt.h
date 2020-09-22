@@ -1,4 +1,6 @@
-/* nrf52.c
+/* encrypt.h
+ *
+ * Functions to encrypt/decrypt external flash content
  *
  * Copyright (C) 2020 wolfSSL Inc.
  *
@@ -19,33 +21,23 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdlib.h>
+#ifndef ENCRYPT_H_INCLUDED
+#define ENCRYPT_H_INCLUDED
+#ifdef __WOLFBOOT
 #include <stdint.h>
-#include <string.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+
+#include "target.h"
 #include "wolfboot/wolfboot.h"
 
+#include <wolfssl/wolfcrypt/chacha.h>
+#include <wolfssl/wolfcrypt/pwdbased.h>
 
-#define GPIO_BASE (0x50000000)
-#define GPIO_OUT        *((volatile uint32_t *)(GPIO_BASE + 0x504))
-#define GPIO_OUTSET     *((volatile uint32_t *)(GPIO_BASE + 0x508))
-#define GPIO_OUTCLR     *((volatile uint32_t *)(GPIO_BASE + 0x50C))
-#define GPIO_PIN_CNF     ((volatile uint32_t *)(GPIO_BASE + 0x700)) // Array
 
-static void gpiotoggle(uint32_t pin)
-{
-    uint32_t reg_val = GPIO_OUT;
-    GPIO_OUTCLR = reg_val & (1 << pin);
-    GPIO_OUTSET = (~reg_val) & (1 << pin);
-}
+/* Internal read/write functions (not exported in the libwolfboot API) */
+int ext_flash_encrypt_write(uintptr_t address, const uint8_t *data, int len);
+int ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len);
 
-void main(void)
-{
-    uint32_t pin = 19;
-    int i;
-    GPIO_PIN_CNF[pin] = 1; /* Output */
-    while(1) {
-        gpiotoggle(pin);
-        for (i = 0; i < 800000; i++)  // Wait a bit.
-              asm volatile ("nop");
-    }
-}
+#endif /* __WOLFBOOT */
+#endif /* ENCRYPT_H_INCLUDED */

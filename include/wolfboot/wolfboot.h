@@ -34,6 +34,12 @@
 #endif
 #define IMAGE_HEADER_OFFSET (2 * sizeof(uint32_t))
 
+#ifdef NVM_FLASH_WRITEONCE
+#   define FLASHBUFFER_SIZE WOLFBOOT_SECTOR_SIZE 
+#else
+#   define FLASHBUFFER_SIZE IMAGE_HEADER_SIZE
+#endif
+
 #define WOLFBOOT_MAGIC          0x464C4F57 /* WOLF */
 #define WOLFBOOT_MAGIC_TRAIL    0x544F4F42 /* BOOT */
 
@@ -72,6 +78,11 @@
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
+#define PART_NONE   0xFF
+
+#define PART_DTS (0x10)
+#define PART_DTS_BOOT       (PART_DTS | PART_BOOT)
+#define PART_DTS_UPDATE     (PART_DTS | PART_UPDATE)
 
 #define IMG_STATE_NEW 0xFF
 #define IMG_STATE_UPDATING 0x70
@@ -87,15 +98,18 @@ uint16_t wolfBoot_get_image_type(uint8_t part);
 #define wolfBoot_current_firmware_version() wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() wolfBoot_get_image_version(PART_UPDATE)
 
+int wolfBoot_fallback_is_possible(void);
+int wolfBoot_dualboot_candidate(void);
 
 /* Hashing function configuration */
-#define WOLFBOOT_SHA_BLOCK_SIZE (16)
 #if defined(WOLFBOOT_HASH_SHA256)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (16)
 #   define WOLFBOOT_SHA_HDR HDR_SHA256
 #   define WOLFBOOT_SHA_DIGEST_SIZE (32)
 #   define image_hash image_sha256
 #   define key_hash key_sha256
 #elif defined(WOLFBOOT_HASH_SHA3_384)
+#   define WOLFBOOT_SHA_BLOCK_SIZE (128)
 #   define WOLFBOOT_SHA_HDR HDR_SHA3_384
 #   define WOLFBOOT_SHA_DIGEST_SIZE (48)
 #   define image_hash image_sha3_384
@@ -104,4 +118,11 @@ uint16_t wolfBoot_get_image_type(uint8_t part);
 #   error "No valid hash algorithm defined!"
 #endif
 
+/* Encryption support */
+#define ENCRYPT_BLOCK_SIZE 16 
+#define ENCRYPT_KEY_SIZE 32 /* Chacha20 - 256bit */
+#define ENCRYPT_NONCE_SIZE 12 /* 96 bit*/
+
+int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
+int wolfBoot_erase_encrypt_key(void);
 #endif /* !WOLFBOOT_H */

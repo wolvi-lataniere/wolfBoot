@@ -37,6 +37,29 @@ On other systems, the SWAP space can be as small as 512B, if multiple smaller fl
 
 More information about the geometry of the flash and in-application programming (IAP) can be found in the manufacturer manual of each target device.
 
+### STM32F4 Programming
+
+```
+st-flash write factory.bin 0x08000000
+```
+
+### STM32F4 Debugging
+
+1. Start GDB server
+
+OpenOCD: `openocd --file ./config/openocd/openocd_stm32f4.cfg`
+OR
+ST-Link: `st-util -p 3333`
+
+2. Start GDB Client
+
+```sh
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x20100
+mon reset init
+b main
+c
+```
 
 ## STM32L0x3
 
@@ -105,7 +128,7 @@ Example partitioning on Nucleo-68 board:
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x48000
 ```
 
-### Building
+### STM32WB55 Building
 
 Use `make TARGET=stm32wb`.
 
@@ -116,27 +139,44 @@ Compile with:
 
 `make TARGET=stm32wb NVM_FLASH_WRITEONCE=1`
 
-### Loading the firmware
+### STM32WB55 with OpenOCD
 
 `openocd --file ./config/openocd/openocd_stm32wbx.cfg`
 
 ```
 telnet localhost 4444
-flash write_image unlock erase wolfboot.bin 0x08000000
-flash verify_bank 0 wolfboot.bin
-flash write_image unlock erase test-app/image_v1_signed.bin 0x080008000
-flash verify_bank 0 test-app/image_v1_signed.bin 0x080008000
+reset halt
+flash write_image unlock erase factory.bin 0x08000000
+flash verify_bank 0 factory.bin
 reset
 ```
 
-### Debugging
+### STM32WB55 with ST-Link
+
+```
+git clone https://github.com/stlink-org/stlink.git
+cd stlink
+cmake .
+make
+sudo make install
+```
+
+```
+st-flash write factory.bin 0x08000000
+
+# Start GDB server
+st-util -p 3333
+```
+
+### STM32WB55 Debugging
 
 Use `make DEBUG=1` and reload firmware.
 
+wolfBoot has a .gdbinit to configure
 ```
-arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
-(gdb) add-symbol-file test-app/image.elf 0x8000
-(gdb) add-symbol-file wolfboot.elf 0x0
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x08008100
+mon reset init
 ```
 
 
@@ -412,6 +452,22 @@ Upon reboot, wolfboot will elect the best candidate (version 2 in this case) and
 If the accepted candidate image resides on BANK B (like in this case), wolfBoot will perform one bank swap before
 booting.
 
+### Debugging
+
+Debugging with OpenOCD:
+
+Use the OpenOCD configuration from the previous section to run OpenOCD.
+
+From another console, connect using gdb, e.g.:
+
+Add wolfboot.elf to the make.
+
+```
+arm-none-eabi-gdb wolfboot.elf -ex "set remotetimeout 240" -ex "target extended-remote localhost:3333"
+(gdb) add-symbol-file test-app/image.elf 0x08020000
+(gdb) add-symbol-file wolfboot.elf 0x08000000
+```
+
 
 ## LPC54606
 
@@ -440,9 +496,8 @@ r
 h
 ```
 
-### Debugging
+### Debugging with JLink
 
-Debugging with JLink:
 ```
 JLinkGDBServer -device LPC606J512 -if SWD -speed 4000 -port 3333
 ```
@@ -452,4 +507,189 @@ Then, from another console:
 ```
 arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 (gdb) add-symbol-file test-app/image.elf 0x0000a100
+```
+
+
+## Cortex-A53 / Raspberry PI 3 (experimental)
+
+Tested using `https://github.com/raspberrypi/linux`
+
+### Compiling the kernel
+
+* Get raspberry-pi linux kernel:
+
+```
+git clone https://github.com/raspberrypi/linux linux-rpi -b rpi-4.19.y --depth=1
+```
+
+* Build kernel image:
+
+```
+cd linux-rpi
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bcmrpi3_defconfig
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+* Copy Image and .dtb to the wolfboot directory
+
+```
+cp Image arch/arm64/boot/dts/broadcom/bcm2710-rpi-3-b.dtb $wolfboot_dir
+cd $wolfboot_dir
+```
+
+### Testing with qemu-system-aarch64
+
+* Build wolfboot using the example configuration (RSA4096, SHA3)
+
+```
+cp config/examples/raspi3.config .config
+make wolfboot-align.bin
+```
+
+* Sign Image and DTB (Device Tree Blob)
+```
+tools/keytools/sign.py --rsa4096 --sha3 Image rsa4096.der 1
+tools/keytools/sign.py --rsa4096 --sha3 bcm2710-rpi-3-b.dtb rsa4096.der 1
+```
+
+* Compose the image
+
+```
+cat wolfboot-align.bin Image_v1_signed.bin >wolfboot_linux_raspi.bin
+dd if=bcm2710-rpi-3-_v1_signed.bin of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrunc
+```
+
+* Test boot using qemu
+
+```
+qemu-system-aarch64 -M raspi3 -m 512 -serial stdio -kernel wolfboot_linux_raspi.bin -append "terminal=ttyS0 rootwait" -dtb ./bcm2710-rpi-3-b.dtb -cpu cortex-a53
+```
+
+## Xilinx Zynq UltraScale+ (Aarch64)
+
+Build configuration options (``.config`):
+
+```
+TARGET=zynq
+ARCH=AARCH64
+SIGN=RSA4096
+HASH=SHA3
+```
+
+### QNX
+
+```sh
+cd ~
+source qnx700/qnxsdp-env.sh
+cd wolfBoot
+cp ./config/examples/zynqmp.config .config
+make clean
+make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
+```
+
+#### Debugging
+
+`qemu-system-aarch64 -M raspi3 -kernel /home/dan/src/wolfboot/factory.bin -serial stdio -gdb tcp::3333 -S`
+
+#### Signing
+
+`tools/keytools/sign.py --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin rsa4096.der 1`
+
+## Cypress PSoC-62S2 (CY8CKIT-062S2)
+
+The Cypress PSoC 62S2 is a dual-core Cortex-M4 & Cortex-M0+ MCU. The secure boot process is managed by the M0+.
+WolfBoot can be compiled as second stage flash bootloader to manage application verification and firmware updates.
+
+### Building
+
+The following configuration has been tested using PSoC 62S2 Wi-Fi BT Pioneer Kit (CY8CKIT-052S2-43012).
+
+#### Target specific requirements
+
+wolfBoot uses the following components to access peripherals on the PSoC:
+
+  * [Cypress Core Library](https://github.com/cypresssemiconductorco/core-lib)
+  * [PSoC 6 Peripheral Driver Library](https://github.com/cypresssemiconductorco/psoc6pdl)
+  * [CY8CKIT-062S2-43012 BSP](https://github.com/cypresssemiconductorco/TARGET_CY8CKIT-062S2-43012)
+
+Cypress provides a [customized OpenOCD](https://github.com/cypresssemiconductorco/Openocd) for programming the flash and
+debugging.
+
+
+### Clock settings
+
+wolfBoot configures PLL1 to run at 100 MHz and is driving `CLK_FAST`, `CLK_PERI`, and `CLK_SLOW` at that frequency.
+
+#### Build configuration
+
+The following configuration has been tested on the PSoC CY8CKIT-62S2-43012:
+
+```
+make TARGET=psoc6 \
+    NVM_FLASH_WRITEONCE=1 \
+    CYPRESS_PDL=./lib/psoc6pdl \
+    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
+    CYPRESS_CORE_LIB=./lib/core-lib \
+    WOLFBOOT_SECTOR_SIZE=4096
+```
+
+Note: A reference `.config` can be found in `./config/examples/cypsoc6.config`.
+
+Hardware acceleration is enable by default using psoc6 crypto hw support.
+
+To compile with hardware acceleration disabled, use the option
+
+``` PSOC6_CRYPTO=0 ```
+
+in your wolfBoot configuration.
+
+#### OpenOCD installation
+
+Compile and install the customized OpenOCD.
+
+Use the following configuration file when running `openocd` to connect to the PSoC6 board:
+
+```
+# openocd.cfg for PSoC-62S2
+
+source [find interface/kitprog3.cfg]
+transport select swd
+adapter speed 1000
+source [find target/psoc6_2m.cfg]
+init
+reset init
+```
+
+### Loading the firmware
+
+To upload `factory.bin` to the device with OpenOCD, connect the device,
+run OpenOCD with the configuration from the previous section, then connect
+to the local openOCD server running on TCP port 4444 using `telnet localhost 4444`.
+
+From the telnet console, type:
+
+`program factory.bin 0x10000000`
+
+When the transfer is finished, you can either close openOCD or start a debugging session.
+
+### Debugging
+
+Debugging with OpenOCD:
+
+Use the OpenOCD configuration from the previous sections to run OpenOCD.
+
+From another console, connect using gdb, e.g.:
+
+```
+arm-none-eabi-gdb
+(gdb) target remote:3333
+```
+
+To reset the board to start from the M0+ flash bootloader position (wolfBoot reset handler), use
+the monitor command sequence below:
+
+```
+(gdb) mon init
+(gdb) mon reset init
+(gdb) mon psoc6 reset_halt
 ```
