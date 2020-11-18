@@ -279,7 +279,8 @@ wolfboot.elf: include/target.h $(OBJS) $(LSCRIPT) FORCE
 
 $(LSCRIPT): hal/$(TARGET).ld .bootloader-partition-size FORCE
 	@cat hal/$(TARGET).ld | \
-		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/`cat .bootloader-partition-size`/g" \
+		sed -e "s/##WOLFBOOT_PARTITION_BOOT_ADDRESS##/`cat .bootloader-partition-size`/g" | \
+		sed -e "s/##WOLFBOOT_PARTITION_SIZE##/$(WOLFBOOT_PARTITION_SIZE)/g" \
 		> $@
 
 hex: wolfboot.hex
